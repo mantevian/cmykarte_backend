@@ -1,0 +1,68 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: postgres_container
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_URL: ${POSTGRES_URL}
+    env_file:
+      - .env
+    ports:
+      - 5432:5432
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d cmykarte"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - cmykarte-network
+  
+  pgadmin:
+    container_name: pgadmin_container
+    image: dpage/pgadmin4:7.2
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      GUNICORN_ACCESS_LOGFILE: "/dev/null"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    ports:
+      - "5050:80"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+    networks:
+      - cmykarte-network
+  
+  game:
+    build:
+      context: .
+      dockerfile: ./src/Dockerfile
+    container_name: game
+    environment:
+      POSTGRES_URL: ${POSTGRES_URL}
+      DEBUG: true
+    volumes:
+      - ./src:/app/src
+      - go-mod-cache:/go/pkg/mod
+    networks:
+      - cmykarte-network
+
+networks:
+  cmykarte-network:
+    driver: bridge
+
+volumes:
+  go-mod-cache:
+  postgres-data:
+  pgadmin-data:
