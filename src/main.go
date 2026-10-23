@@ -12,6 +12,8 @@ import (
 	"mantevian.xyz/cmykarte_backend/common/types"
 	"mantevian.xyz/cmykarte_backend/functions"
 	"mantevian.xyz/cmykarte_backend/ws"
+
+	_ "github.com/lib/pq"
 )
 
 var upgrader = websocket.Upgrader{
