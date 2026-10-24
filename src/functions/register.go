@@ -6,6 +6,14 @@ import (
 )
 
 func Register(req types.RegisterRequest, ctx types.FunctionCallCtx) types.RegisterResponse {
+	if len(req.Name) < 3 {
+		return types.RegisterError("Name length should be at least 3")
+	}
+
+	if len(req.Password) < 6 {
+		return types.RegisterError("Password length should be at least 6")
+	}
+
 	if req.Password != req.PasswordConfirm {
 		return types.RegisterError("Passwords don't match")
 	}

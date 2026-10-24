@@ -4,5 +4,6 @@ create table users (
 	password varchar(256),
 	created_at timestamptz,
 
-	primary key (id)
+	primary key (id),
+	unique (name)
 );
