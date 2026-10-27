@@ -9,23 +9,17 @@ import (
 	"mantevian.xyz/cmykarte_backend/common/types"
 )
 
-type Hub struct {
+var Hub struct {
 	mu          sync.RWMutex
 	clients     map[string]map[types.Uuid]*Client // group -> client id -> client
 	clientGroup map[types.Uuid]string             // client id -> group
+	userClient  map[types.Uuid]*Client            // user id -> client
 }
 
-func NewHub() *Hub {
-	return &Hub{
-		clients:     make(map[string]map[string]*Client),
-		clientGroup: make(map[string]string),
-	}
-}
-
-func (h *Hub) GetClientsInGroup(group string) []*Client {
-	h.mu.RLock()
-	m := h.clients[group]
-	h.mu.RUnlock()
+func GetClientsInGroup(group string) []*Client {
+	Hub.mu.RLock()
+	m := Hub.clients[group]
+	Hub.mu.RUnlock()
 
 	var clients []*Client
 	for _, c := range m {
@@ -34,12 +28,32 @@ func (h *Hub) GetClientsInGroup(group string) []*Client {
 	return clients
 }
 
-func (h *Hub) Broadcast(group string, action string, payload []byte) {
-	h.mu.RLock()
-	m := h.clients[group]
-	h.mu.RUnlock()
+func SendToUser(userId types.Uuid, action string, payload any) {
+	Hub.mu.RLock()
+	client, ok := Hub.userClient[userId]
 
-	msg := types.WsMessage{
+	if !ok {
+		return
+	}
+
+	Hub.mu.RUnlock()
+
+	msg := types.WsResponse{
+		Action:  action,
+		Payload: payload,
+	}
+	msgBytes, _ := json.Marshal(msg)
+	fmt.Println("send to user >>", userId, "/", action, ">>", string(msgBytes))
+
+	_ = client.Conn.WriteMessage(websocket.TextMessage, msgBytes)
+}
+
+func Broadcast(group string, action string, payload any) {
+	Hub.mu.RLock()
+	m := Hub.clients[group]
+	Hub.mu.RUnlock()
+
+	msg := types.WsResponse{
 		Action:  action,
 		Payload: payload,
 	}
@@ -50,63 +64,76 @@ func (h *Hub) Broadcast(group string, action string, payload []byte) {
 	}
 }
 
-func (h *Hub) AddClient(group string, c *Client) {
-	h.mu.Lock()
-	m, ok := h.clients[group]
+func AddClient(group string, c *Client) {
+	Hub.mu.Lock()
+	m, ok := Hub.clients[group]
 	if !ok {
 		m = make(map[string]*Client)
-		h.clients[group] = m
+		Hub.clients[group] = m
 	}
 	m[c.Id] = c
-	h.clientGroup[c.Id] = group
-	h.mu.Unlock()
+	Hub.clientGroup[c.Id] = group
+	Hub.mu.Unlock()
 }
 
-func (h *Hub) RemoveClient(id string) {
-	h.mu.Lock()
-	group, ok := h.clientGroup[id]
+func RemoveClient(id string) {
+	Hub.mu.Lock()
+	group, ok := Hub.clientGroup[id]
 	if ok {
-		if m, ok2 := h.clients[group]; ok2 {
+		if m, ok2 := Hub.clients[group]; ok2 {
+			c := m[id]
+			delete(Hub.userClient, c.UserId)
 			delete(m, id)
+
+			c.Conn.Close()
+
 			if len(m) == 0 {
-				delete(h.clients, group)
+				delete(Hub.clients, group)
 			}
 		}
-		delete(h.clientGroup, id)
+		delete(Hub.clientGroup, id)
 	}
-	h.mu.Unlock()
+
+	Hub.mu.Unlock()
 }
 
-func (h *Hub) MoveClient(id string, group string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+func MoveUser(userId types.Uuid, group string) {
+	Hub.mu.Lock()
+	defer Hub.mu.Unlock()
 
-	curGroup := h.clientGroup[id]
+	client := Hub.userClient[userId]
+
+	curGroup := Hub.clientGroup[client.Id]
 	if curGroup == group {
 		return
 	}
 
-	if m, ok := h.clients[curGroup]; ok {
-		client := m[id]
-		delete(m, id)
+	if m, ok := Hub.clients[curGroup]; ok {
+		delete(m, client.Id)
 		if len(m) == 0 {
-			delete(h.clients, curGroup)
+			delete(Hub.clients, curGroup)
 		}
 
-		dst, ok := h.clients[group]
+		dst, ok := Hub.clients[group]
 		if !ok {
 			dst = make(map[string]*Client)
-			h.clients[group] = dst
+			Hub.clients[group] = dst
 		}
-		dst[id] = client
-		h.clientGroup[id] = group
+		dst[client.Id] = client
+		Hub.clientGroup[client.Id] = group
 	}
 }
 
-func (h *Hub) SetClientUserId(clientId types.Uuid, userId types.Uuid) {
-	h.mu.Lock()
-	g := h.clientGroup[clientId]
-	c := h.clients[g][clientId]
+func SetClientUserId(clientId types.Uuid, userId types.Uuid) {
+	Hub.mu.Lock()
+	g := Hub.clientGroup[clientId]
+	c := Hub.clients[g][clientId]
 	c.UserId = userId
-	h.mu.Unlock()
+
+	if _, ok := Hub.userClient[userId]; ok {
+
+	}
+
+	Hub.userClient[userId] = c
+	Hub.mu.Unlock()
 }
