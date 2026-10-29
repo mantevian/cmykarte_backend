@@ -86,6 +86,7 @@ func HandleWs(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
 
 			if authSuccess {
 				ctx.UserId = validateTokenRes.Claims.UserId
+				ctx.Username = validateTokenRes.Claims.Name
 
 				switch message.Action {
 				case "queue":

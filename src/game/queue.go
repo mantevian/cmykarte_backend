@@ -12,10 +12,16 @@ var QUEUE_INTERVAL = 1 * time.Second
 var CLEANUP_INTERVAL = 1 * time.Minute
 
 var Queue struct {
-	Entries map[types.Uuid]time.Time
+	Entries map[types.Uuid]QueuedPlayer
 } = struct {
-	Entries map[types.Uuid]time.Time
-}{Entries: make(map[types.Uuid]time.Time)}
+	Entries map[types.Uuid]QueuedPlayer
+}{Entries: make(map[types.Uuid]QueuedPlayer)}
+
+type QueuedPlayer struct {
+	UserId   types.Uuid
+	Username string
+	JoinedAt time.Time
+}
 
 func StartLookingForMatches() {
 	go func() {
@@ -47,12 +53,16 @@ func startQueuedMatch() {
 	}
 }
 
-func AddQueueEntry(user types.Uuid) bool {
+func AddQueueEntry(user types.Uuid, username string) bool {
 	if _, ok := Queue.Entries[user]; ok {
 		return false
 	}
 
-	Queue.Entries[user] = time.Now()
+	Queue.Entries[user] = QueuedPlayer{
+		UserId:   user,
+		Username: username,
+		JoinedAt: time.Now(),
+	}
 
 	return true
 }
@@ -66,9 +76,9 @@ func RemoveQueueEntry(user types.Uuid) bool {
 	return true
 }
 
-func TakeMatch() (found bool, player1 types.Uuid, player2 types.Uuid) {
+func TakeMatch() (found bool, player1 QueuedPlayer, player2 QueuedPlayer) {
 	if len(Queue.Entries) < 2 {
-		return false, "", ""
+		return false, QueuedPlayer{}, QueuedPlayer{}
 	}
 
 	keys := make([]string, 0, len(Queue.Entries))
@@ -76,15 +86,15 @@ func TakeMatch() (found bool, player1 types.Uuid, player2 types.Uuid) {
 		keys = append(keys, k)
 	}
 	slices.SortFunc(keys, func(a string, b string) int {
-		return Queue.Entries[a].Compare(Queue.Entries[b])
+		return Queue.Entries[a].JoinedAt.Compare(Queue.Entries[b].JoinedAt)
 	})
 
-	player1 = keys[0]
-	player2 = keys[1]
+	player1 = Queue.Entries[keys[0]]
+	player2 = Queue.Entries[keys[1]]
 	found = true
 
-	delete(Queue.Entries, player1)
-	delete(Queue.Entries, player2)
+	delete(Queue.Entries, player1.UserId)
+	delete(Queue.Entries, player2.UserId)
 
 	return
 }
@@ -93,8 +103,8 @@ func Cleanup() (cleared int) {
 	cleared = 0
 	now := time.Now()
 
-	for userId, queuedTime := range Queue.Entries {
-		if now.Sub(queuedTime) > time.Minute {
+	for userId, player := range Queue.Entries {
+		if now.Sub(player.JoinedAt) > time.Minute {
 			delete(Queue.Entries, userId)
 			cleared += 1
 		}

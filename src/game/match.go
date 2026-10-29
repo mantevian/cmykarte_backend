@@ -18,27 +18,30 @@ var (
 	Matches   = make(map[string]types.Match)
 )
 
-func StartMatch(user1 types.Uuid, user2 types.Uuid) (matchId string) {
+func StartMatch(queuedPlayer1 QueuedPlayer, queuedPlayer2 QueuedPlayer) (matchId string) {
 	matchId = fmt.Sprintf("match_%s", uuid.NewV4())
 
 	playerRGB := types.Player{
-		UserId: user1,
-		Type:   enums.CardTypeRGB,
-		Money:  1,
-		Deck:   Shuffle(CreateRGBDeck()),
+		UserId:   queuedPlayer1.UserId,
+		Username: queuedPlayer1.Username,
+		Type:     enums.CardTypeRGB,
+		Money:    1,
+		Deck:     Shuffle(CreateRGBDeck()),
 	}
 	DrawCards(&playerRGB, 5)
 
 	playerCMY := types.Player{
-		UserId: user2,
-		Type:   enums.CardTypeCMY,
-		Money:  1,
-		Deck:   Shuffle(CreateCMYDeck()),
+		UserId:   queuedPlayer2.UserId,
+		Username: queuedPlayer2.Username,
+		Type:     enums.CardTypeCMY,
+		Money:    1,
+		Deck:     Shuffle(CreateCMYDeck()),
 	}
 	DrawCards(&playerCMY, 5)
 
 	if rand.Int()%2 == 0 {
 		playerRGB.UserId, playerCMY.UserId = playerCMY.UserId, playerRGB.UserId
+		playerRGB.Username, playerCMY.Username = playerCMY.Username, playerRGB.Username
 	}
 
 	match := types.Match{
@@ -54,20 +57,22 @@ func StartMatch(user1 types.Uuid, user2 types.Uuid) (matchId string) {
 	Matches[matchId] = match
 	matchesMu.Unlock()
 
-	ws.MoveUser(user1, matchId)
-	ws.MoveUser(user2, matchId)
+	ws.MoveUser(queuedPlayer1.UserId, matchId)
+	ws.MoveUser(queuedPlayer2.UserId, matchId)
 
 	ws.Broadcast(matchId, "match_started", types.MatchStartedMessage{
 		MatchId: matchId,
 		PlayerRGB: types.PublicPlayer{
-			UserId: playerRGB.UserId,
-			Type:   playerRGB.Type,
-			Money:  playerRGB.Money,
+			UserId:   playerRGB.UserId,
+			Username: playerRGB.Username,
+			Type:     playerRGB.Type,
+			Money:    playerRGB.Money,
 		},
 		PlayerCMY: types.PublicPlayer{
-			UserId: playerCMY.UserId,
-			Type:   playerCMY.Type,
-			Money:  playerCMY.Money,
+			UserId:   playerCMY.UserId,
+			Username: playerCMY.Username,
+			Type:     playerCMY.Type,
+			Money:    playerCMY.Money,
 		},
 		Round: match.Round,
 		Turn:  match.Turn,
@@ -195,8 +200,9 @@ func publishMatchState(matchId string, match types.Match) {
 
 func publicPlayer(player types.Player) types.PublicPlayer {
 	return types.PublicPlayer{
-		UserId: player.UserId,
-		Type:   player.Type,
-		Money:  player.Money,
+		UserId:   player.UserId,
+		Username: player.Username,
+		Type:     player.Type,
+		Money:    player.Money,
 	}
 }
