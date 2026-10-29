@@ -13,7 +13,9 @@ var CLEANUP_INTERVAL = 1 * time.Minute
 
 var Queue struct {
 	Entries map[types.Uuid]time.Time
-}
+} = struct {
+	Entries map[types.Uuid]time.Time
+}{Entries: make(map[types.Uuid]time.Time)}
 
 func StartLookingForMatches() {
 	go func() {
@@ -22,7 +24,7 @@ func StartLookingForMatches() {
 
 		for range ticker.C {
 			log.Printf("looking for match, currently have %d entries", len(Queue.Entries))
-			TakeMatch()
+			startQueuedMatch()
 		}
 	}()
 
@@ -33,9 +35,16 @@ func StartLookingForMatches() {
 		for range ticker.C {
 			cleared := Cleanup()
 			log.Printf("done cleanup, cleared %d entries", cleared)
-			TakeMatch()
+			startQueuedMatch()
 		}
 	}()
+}
+
+func startQueuedMatch() {
+	found, player1, player2 := TakeMatch()
+	if found {
+		StartMatch(player1, player2)
+	}
 }
 
 func AddQueueEntry(user types.Uuid) bool {

@@ -14,6 +14,15 @@ var Hub struct {
 	clients     map[string]map[types.Uuid]*Client // group -> client id -> client
 	clientGroup map[types.Uuid]string             // client id -> group
 	userClient  map[types.Uuid]*Client            // user id -> client
+} = struct {
+	mu          sync.RWMutex
+	clients     map[string]map[types.Uuid]*Client
+	clientGroup map[types.Uuid]string
+	userClient  map[types.Uuid]*Client
+}{
+	clients:     make(map[string]map[types.Uuid]*Client),
+	clientGroup: make(map[types.Uuid]string),
+	userClient:  make(map[types.Uuid]*Client),
 }
 
 func GetClientsInGroup(group string) []*Client {
@@ -33,6 +42,7 @@ func SendToUser(userId types.Uuid, action string, payload any) {
 	client, ok := Hub.userClient[userId]
 
 	if !ok {
+		Hub.mu.RUnlock()
 		return
 	}
 

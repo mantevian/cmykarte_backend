@@ -10,6 +10,7 @@ import (
 	"github.com/gorilla/websocket"
 	"mantevian.xyz/cmykarte_backend/common/types"
 	"mantevian.xyz/cmykarte_backend/functions"
+	"mantevian.xyz/cmykarte_backend/game"
 	"mantevian.xyz/cmykarte_backend/ws"
 )
 
@@ -97,6 +98,22 @@ func HandleWs(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
 					json.Unmarshal(message.Payload, &req)
 					queueRes := functions.Unqueue(req, ctx)
 					res = queueRes
+				case "end_turn":
+					var req types.EndTurnRequest
+					json.Unmarshal(message.Payload, &req)
+					if game.EndTurn(req.MatchId, ctx.UserId) {
+						res = types.GenericResponseSuccess("")
+					} else {
+						res = types.GenericResponseError("Unable to end turn")
+					}
+				case "play_card":
+					var req types.PlayCardRequest
+					json.Unmarshal(message.Payload, &req)
+					if err := game.PlayCard(req.MatchId, ctx.UserId, req.CardIndex); err != nil {
+						res = types.GenericResponseError(err.Error())
+					} else {
+						res = types.GenericResponseSuccess("")
+					}
 				}
 			}
 

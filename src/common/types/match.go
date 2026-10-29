@@ -16,9 +16,21 @@ type Match struct {
 }
 
 type MatchStartedMessage struct {
-	MatchId   string       `json:"match_id"`
-	PlayerRGB PublicPlayer `json:"player_rgb"`
-	PlayerCMY PublicPlayer `json:"player_cmy"`
+	MatchId   string         `json:"match_id"`
+	PlayerRGB PublicPlayer   `json:"player_rgb"`
+	PlayerCMY PublicPlayer   `json:"player_cmy"`
+	Round     int            `json:"round"`
+	Turn      enums.CardType `json:"turn"`
+	Field     Field          `json:"field"`
+}
+
+type EndTurnRequest struct {
+	MatchId string `json:"match_id"`
+}
+
+type PlayCardRequest struct {
+	MatchId   string `json:"match_id"`
+	CardIndex int    `json:"card_index"`
 }
 
 type MatchInfoForGroupMessage struct {
