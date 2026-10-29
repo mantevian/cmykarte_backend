@@ -31,6 +31,7 @@ type EndTurnRequest struct {
 type PlayCardRequest struct {
 	MatchId   string `json:"match_id"`
 	CardIndex int    `json:"card_index"`
+	Tile      *Vec2  `json:"tile"`
 }
 
 type MatchInfoForGroupMessage struct {

@@ -109,8 +109,11 @@ func HandleWs(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
 					}
 				case "play_card":
 					var req types.PlayCardRequest
-					json.Unmarshal(message.Payload, &req)
-					if err := game.PlayCard(req.MatchId, ctx.UserId, req.CardIndex); err != nil {
+					if err := json.Unmarshal(message.Payload, &req); err != nil {
+						res = types.GenericResponseError("Invalid play_card payload: " + err.Error())
+					} else if req.Tile == nil {
+						res = types.GenericResponseError("Tile is required")
+					} else if err := game.PlayCard(req.MatchId, ctx.UserId, req.CardIndex, *req.Tile); err != nil {
 						res = types.GenericResponseError(err.Error())
 					} else {
 						res = types.GenericResponseSuccess("")

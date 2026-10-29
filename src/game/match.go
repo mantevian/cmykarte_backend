@@ -28,7 +28,7 @@ func StartMatch(queuedPlayer1 QueuedPlayer, queuedPlayer2 QueuedPlayer) (matchId
 		Money:    1,
 		Deck:     Shuffle(CreateRGBDeck()),
 	}
-	DrawCards(&playerRGB, 5)
+	DrawCards(&playerRGB, 3)
 
 	playerCMY := types.Player{
 		UserId:   queuedPlayer2.UserId,
@@ -37,7 +37,7 @@ func StartMatch(queuedPlayer1 QueuedPlayer, queuedPlayer2 QueuedPlayer) (matchId
 		Money:    1,
 		Deck:     Shuffle(CreateCMYDeck()),
 	}
-	DrawCards(&playerCMY, 5)
+	DrawCards(&playerCMY, 3)
 
 	if rand.Int()%2 == 0 {
 		playerRGB.UserId, playerCMY.UserId = playerCMY.UserId, playerRGB.UserId
@@ -108,7 +108,6 @@ func EndTurn(matchId string, userId types.Uuid) bool {
 		match.PlayerRGB.Money = 0
 		match.Turn = enums.CardTypeCMY
 		match.PlayerCMY.Money = match.Round
-		DrawCards(&match.PlayerCMY, 2)
 	case enums.CardTypeCMY:
 		if match.PlayerCMY.UserId != userId {
 			matchesMu.Unlock()
@@ -119,6 +118,7 @@ func EndTurn(matchId string, userId types.Uuid) bool {
 		match.Turn = enums.CardTypeRGB
 		match.PlayerRGB.Money = match.Round
 		DrawCards(&match.PlayerRGB, 2)
+		DrawCards(&match.PlayerCMY, 2)
 	default:
 		matchesMu.Unlock()
 		return false
@@ -131,7 +131,7 @@ func EndTurn(matchId string, userId types.Uuid) bool {
 	return true
 }
 
-func PlayCard(matchId string, userId types.Uuid, cardIndex int) error {
+func PlayCard(matchId string, userId types.Uuid, cardIndex int, tile types.Vec2) error {
 	matchesMu.Lock()
 	match, ok := Matches[matchId]
 	if !ok {
@@ -169,6 +169,15 @@ func PlayCard(matchId string, userId types.Uuid, cardIndex int) error {
 		return errors.New("not enough money to play this card")
 	}
 
+	changes, err := cardFieldChanges(match.Field, card, tile)
+	if err != nil {
+		matchesMu.Unlock()
+		return err
+	}
+
+	for _, change := range changes {
+		match.Field.Tiles[change.tile] = change.color
+	}
 	activePlayer.Money -= card.Cost
 	activePlayer.Hand = append(activePlayer.Hand[:cardIndex], activePlayer.Hand[cardIndex+1:]...)
 	Matches[matchId] = match
@@ -176,6 +185,64 @@ func PlayCard(matchId string, userId types.Uuid, cardIndex int) error {
 
 	publishMatchState(matchId, match)
 	return nil
+}
+
+type tileColorChange struct {
+	tile  types.Vec2
+	color types.Color
+}
+
+func cardFieldChanges(field types.Field, card types.Card, anchor types.Vec2) ([]tileColorChange, error) {
+	if _, ok := field.Tiles[anchor]; !ok {
+		return nil, errors.New("tile is outside the field")
+	}
+
+	var delta types.Color
+	switch card.Type {
+	case enums.CardTypeRGB:
+		delta = card.Color
+	case enums.CardTypeCMY:
+		delta = types.Color{
+			R: -(card.Color.G/2 + card.Color.B/2),
+			G: -(card.Color.R/2 + card.Color.B/2),
+			B: -(card.Color.R/2 + card.Color.G/2),
+		}
+	default:
+		return nil, errors.New("card has an invalid type")
+	}
+
+	changes := make([]tileColorChange, 0, len(card.Pattern))
+	for offset, modifier := range card.Pattern {
+		var applied types.Color
+		switch modifier {
+		case types.ModifierTypeFull:
+			applied = delta
+		case types.ModifierTypeHalf:
+			applied = types.Color{R: delta.R / 2, G: delta.G / 2, B: delta.B / 2}
+		case types.ModifierTypeOne:
+			applied = types.Color{R: 1, G: 1, B: 1}
+		case types.ModifierTypeNone:
+			continue
+		default:
+			return nil, errors.New("card has an invalid pattern modifier")
+		}
+
+		target := types.NewVec2(anchor.X+offset.X, anchor.Y+offset.Y)
+		color, ok := field.Tiles[target]
+		if !ok {
+			continue
+		}
+		changes = append(changes, tileColorChange{
+			tile: target,
+			color: types.Color{
+				R: color.R + applied.R,
+				G: color.G + applied.G,
+				B: color.B + applied.B,
+			},
+		})
+	}
+
+	return changes, nil
 }
 
 func publishMatchState(matchId string, match types.Match) {
@@ -188,13 +255,13 @@ func publishMatchState(matchId string, match types.Match) {
 		Field:     match.Field,
 	})
 
-	activePlayer := match.PlayerCMY
-	if match.Turn == enums.CardTypeRGB {
-		activePlayer = match.PlayerRGB
-	}
-	ws.SendToUser(activePlayer.UserId, "match_info_for_player", types.MatchInfoForPlayerMessage{
+	ws.SendToUser(match.PlayerRGB.UserId, "match_info_for_player", types.MatchInfoForPlayerMessage{
 		MatchId: matchId,
-		Hand:    activePlayer.Hand,
+		Hand:    match.PlayerRGB.Hand,
+	})
+	ws.SendToUser(match.PlayerCMY.UserId, "match_info_for_player", types.MatchInfoForPlayerMessage{
+		MatchId: matchId,
+		Hand:    match.PlayerCMY.Hand,
 	})
 }
 

@@ -1,6 +1,7 @@
 package types
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -16,6 +17,23 @@ func NewVec2(x int, y int) Vec2 {
 		X: x,
 		Y: y,
 	}
+}
+
+func (v *Vec2) UnmarshalJSON(data []byte) error {
+	var coordinates struct {
+		X *int `json:"x"`
+		Y *int `json:"y"`
+	}
+	if err := json.Unmarshal(data, &coordinates); err != nil {
+		return err
+	}
+	if coordinates.X == nil || coordinates.Y == nil {
+		return fmt.Errorf("invalid Vec2: both x and y are required")
+	}
+
+	v.X = *coordinates.X
+	v.Y = *coordinates.Y
+	return nil
 }
 
 func (v Vec2) MarshalText() ([]byte, error) {
