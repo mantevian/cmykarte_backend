@@ -13,6 +13,8 @@ import (
 	"mantevian.xyz/cmykarte_backend/ws"
 )
 
+const winningScore = 13
+
 var (
 	matchesMu sync.RWMutex
 	Matches   = make(map[string]types.Match)
@@ -61,22 +63,12 @@ func StartMatch(queuedPlayer1 QueuedPlayer, queuedPlayer2 QueuedPlayer) (matchId
 	ws.MoveUser(queuedPlayer2.UserId, matchId)
 
 	ws.Broadcast(matchId, "match_started", types.MatchStartedMessage{
-		MatchId: matchId,
-		PlayerRGB: types.PublicPlayer{
-			UserId:   playerRGB.UserId,
-			Username: playerRGB.Username,
-			Type:     playerRGB.Type,
-			Money:    playerRGB.Money,
-		},
-		PlayerCMY: types.PublicPlayer{
-			UserId:   playerCMY.UserId,
-			Username: playerCMY.Username,
-			Type:     playerCMY.Type,
-			Money:    playerCMY.Money,
-		},
-		Round: match.Round,
-		Turn:  match.Turn,
-		Field: match.Field,
+		MatchId:   matchId,
+		PlayerRGB: publicPlayer(playerRGB),
+		PlayerCMY: publicPlayer(playerCMY),
+		Round:     match.Round,
+		Turn:      match.Turn,
+		Field:     match.Field,
 	})
 
 	ws.SendToUser(playerRGB.UserId, "match_info_for_player", types.MatchInfoForPlayerMessage{
@@ -94,7 +86,7 @@ func StartMatch(queuedPlayer1 QueuedPlayer, queuedPlayer2 QueuedPlayer) (matchId
 func EndTurn(matchId string, userId types.Uuid) bool {
 	matchesMu.Lock()
 	match, ok := Matches[matchId]
-	if !ok {
+	if !ok || match.Finished {
 		matchesMu.Unlock()
 		return false
 	}
@@ -138,6 +130,10 @@ func PlayCard(matchId string, userId types.Uuid, cardIndex int, tile types.Vec2)
 		matchesMu.Unlock()
 		return errors.New("match not found")
 	}
+	if match.Finished {
+		matchesMu.Unlock()
+		return errors.New("match has ended")
+	}
 
 	var activePlayer *types.Player
 	switch match.Turn {
@@ -175,15 +171,47 @@ func PlayCard(matchId string, userId types.Uuid, cardIndex int, tile types.Vec2)
 		return err
 	}
 
+	initializeFieldClaims(&match.Field)
 	for _, change := range changes {
-		match.Field.Tiles[change.tile] = change.color
+		if match.Field.ClaimedBy[change.tile] != "" {
+			continue
+		}
+
+		color := clampColor(change.color)
+		match.Field.Tiles[change.tile] = color
+		switch color {
+		case types.NewColor(20, 20, 20):
+			match.Field.ClaimedBy[change.tile] = enums.CardTypeRGB
+			match.PlayerRGB.Score++
+		case types.NewColor(0, 0, 0):
+			match.Field.ClaimedBy[change.tile] = enums.CardTypeCMY
+			match.PlayerCMY.Score++
+		}
 	}
 	activePlayer.Money -= card.Cost
 	activePlayer.Hand = append(activePlayer.Hand[:cardIndex], activePlayer.Hand[cardIndex+1:]...)
+	var winner *types.Player
+	if match.PlayerRGB.Score >= winningScore {
+		winner = &match.PlayerRGB
+	} else if match.PlayerCMY.Score >= winningScore {
+		winner = &match.PlayerCMY
+	}
+	if winner != nil {
+		match.Finished = true
+	}
 	Matches[matchId] = match
 	matchesMu.Unlock()
 
 	publishMatchState(matchId, match)
+	if winner != nil {
+		ws.Broadcast(matchId, "match_ended", types.MatchEndedMessage{
+			MatchId:   matchId,
+			Winner:    publicPlayer(*winner),
+			PlayerRGB: publicPlayer(match.PlayerRGB),
+			PlayerCMY: publicPlayer(match.PlayerCMY),
+			Field:     match.Field,
+		})
+	}
 	return nil
 }
 
@@ -233,16 +261,41 @@ func cardFieldChanges(field types.Field, card types.Card, anchor types.Vec2) ([]
 			continue
 		}
 		changes = append(changes, tileColorChange{
-			tile: target,
-			color: types.Color{
-				R: color.R + applied.R,
-				G: color.G + applied.G,
-				B: color.B + applied.B,
-			},
+			tile:  target,
+			color: types.Color{R: color.R + applied.R, G: color.G + applied.G, B: color.B + applied.B},
 		})
 	}
 
 	return changes, nil
+}
+
+func initializeFieldClaims(field *types.Field) {
+	if field.ClaimedBy == nil {
+		field.ClaimedBy = make(map[types.Vec2]enums.CardType, len(field.Tiles))
+	}
+	for tile := range field.Tiles {
+		if _, ok := field.ClaimedBy[tile]; !ok {
+			field.ClaimedBy[tile] = ""
+		}
+	}
+}
+
+func clampColor(color types.Color) types.Color {
+	return types.Color{
+		R: clampChannel(color.R),
+		G: clampChannel(color.G),
+		B: clampChannel(color.B),
+	}
+}
+
+func clampChannel(channel int) int {
+	if channel < 0 {
+		return 0
+	}
+	if channel > 20 {
+		return 20
+	}
+	return channel
 }
 
 func publishMatchState(matchId string, match types.Match) {
@@ -271,5 +324,6 @@ func publicPlayer(player types.Player) types.PublicPlayer {
 		Username: player.Username,
 		Type:     player.Type,
 		Money:    player.Money,
+		Score:    player.Score,
 	}
 }

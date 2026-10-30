@@ -259,9 +259,9 @@ func CreateCMYDeck() []types.Card {
 		CMYCard(5, c(6, 0, 3), patternCMY3), // 27
 		CMYCard(5, c(3, 0, 6), patternCMY3), // 27
 
-		CMYCard(5, c(6, 0, 0), patternRGB3), // 26
-		CMYCard(5, c(0, 6, 0), patternRGB3), // 26
-		CMYCard(5, c(0, 0, 6), patternRGB3), // 26
+		CMYCard(5, c(6, 0, 0), patternCMY3), // 26
+		CMYCard(5, c(0, 6, 0), patternCMY3), // 26
+		CMYCard(5, c(0, 0, 6), patternCMY3), // 26
 
 		// 7
 		CMYCard(7, c(4, 4, 4), patternCMY4), // 48

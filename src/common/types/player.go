@@ -7,6 +7,7 @@ type PublicPlayer struct {
 	Username string         `json:"username"`
 	Type     enums.CardType `json:"type"`
 	Money    int            `json:"money"`
+	Score    int            `json:"score"`
 }
 
 type Player struct {
@@ -14,6 +15,7 @@ type Player struct {
 	Username string         `json:"username"`
 	Type     enums.CardType `json:"type"`
 	Money    int            `json:"money"`
+	Score    int            `json:"score"`
 	Hand     []Card         `json:"hand"`
 	Deck     []Card         `json:"deck"`
 }

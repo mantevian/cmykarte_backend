@@ -12,6 +12,7 @@ type Match struct {
 	Round     int
 	Turn      enums.CardType
 	Field     Field
+	Finished  bool
 	StartedAt time.Time
 }
 
@@ -41,6 +42,14 @@ type MatchInfoForGroupMessage struct {
 	Round     int            `json:"round"`
 	Turn      enums.CardType `json:"turn"`
 	Field     Field          `json:"field"`
+}
+
+type MatchEndedMessage struct {
+	MatchId   string       `json:"match_id"`
+	Winner    PublicPlayer `json:"winner"`
+	PlayerRGB PublicPlayer `json:"player_rgb"`
+	PlayerCMY PublicPlayer `json:"player_cmy"`
+	Field     Field        `json:"field"`
 }
 
 type MatchInfoForPlayerMessage struct {
