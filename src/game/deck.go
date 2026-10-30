@@ -79,7 +79,7 @@ func CMYCard(cost int, color types.Color, pattern map[types.Vec2]types.ModifierT
 }
 
 func CreateRGBDeck() []types.Card {
-	cards := [90]types.Card{
+	cards := []types.Card{
 		// 1
 		RGBCard(1, c(4, 0, 0), pattern1), RGBCard(1, c(4, 0, 0), pattern1), // 4
 		RGBCard(1, c(0, 4, 0), pattern1), RGBCard(1, c(0, 4, 0), pattern1), // 4
@@ -169,13 +169,37 @@ func CreateRGBDeck() []types.Card {
 
 		// 7
 		RGBCard(7, c(5, 5, 5), patternRGB3), // 53
+
+		// 6
+		RGBCard(6, c(8, 0, 0), patternRGB3), // 32
+		RGBCard(6, c(0, 8, 0), patternRGB3), // 32
+		RGBCard(6, c(0, 0, 8), patternRGB3), // 32
+		RGBCard(6, c(4, 4, 0), patternRGB3), // 32
+		RGBCard(6, c(0, 4, 4), patternRGB3), // 32
+		RGBCard(6, c(4, 0, 4), patternRGB3), // 32
+
+		// 7
+		RGBCard(7, c(10, 0, 0), patternRGB3), // 38
+		RGBCard(7, c(0, 10, 0), patternRGB3), // 38
+		RGBCard(7, c(0, 0, 10), patternRGB3), // 38
+		RGBCard(7, c(6, 4, 0), patternRGB3),  // 38
+		RGBCard(7, c(0, 6, 4), patternRGB3),  // 38
+		RGBCard(7, c(4, 0, 6), patternRGB3),  // 38
+
+		// 8
+		RGBCard(8, c(12, 0, 0), patternRGB3), // 44
+		RGBCard(8, c(0, 12, 0), patternRGB3), // 44
+		RGBCard(8, c(0, 0, 12), patternRGB3), // 44
+		RGBCard(8, c(8, 4, 0), patternRGB3),  // 44
+		RGBCard(8, c(0, 8, 4), patternRGB3),  // 44
+		RGBCard(8, c(4, 0, 8), patternRGB3),  // 44
 	}
 
-	return cards[:]
+	return cards
 }
 
 func CreateCMYDeck() []types.Card {
-	cards := [90]types.Card{
+	cards := []types.Card{
 		// 1
 		CMYCard(1, c(4, 0, 0), pattern1), CMYCard(1, c(4, 0, 0), pattern1), // 4
 		CMYCard(1, c(0, 4, 0), pattern1), CMYCard(1, c(0, 4, 0), pattern1), // 4
@@ -265,9 +289,33 @@ func CreateCMYDeck() []types.Card {
 
 		// 7
 		CMYCard(7, c(4, 4, 4), patternCMY4), // 48
+
+		// 6
+		CMYCard(6, c(8, 0, 0), patternCMY4), // 32
+		CMYCard(6, c(0, 8, 0), patternCMY4), // 32
+		CMYCard(6, c(0, 0, 8), patternCMY4), // 32
+		CMYCard(6, c(4, 4, 0), patternCMY4), // 32
+		CMYCard(6, c(0, 4, 4), patternCMY4), // 32
+		CMYCard(6, c(4, 0, 4), patternCMY4), // 32
+
+		// 7
+		CMYCard(7, c(10, 0, 0), patternCMY4), // 40
+		CMYCard(7, c(0, 10, 0), patternCMY4), // 40
+		CMYCard(7, c(0, 0, 10), patternCMY4), // 40
+		CMYCard(7, c(6, 4, 0), patternCMY4),  // 40
+		CMYCard(7, c(0, 6, 4), patternCMY4),  // 40
+		CMYCard(7, c(4, 0, 6), patternCMY4),  // 40
+
+		// 8
+		CMYCard(8, c(12, 0, 0), patternCMY4), // 48
+		CMYCard(8, c(0, 12, 0), patternCMY4), // 48
+		CMYCard(8, c(0, 0, 12), patternCMY4), // 48
+		CMYCard(8, c(8, 4, 0), patternCMY4),  // 48
+		CMYCard(8, c(0, 8, 4), patternCMY4),  // 48
+		CMYCard(8, c(4, 0, 8), patternCMY4),  // 48
 	}
 
-	return cards[:]
+	return cards
 }
 
 func Shuffle(cards []types.Card) []types.Card {

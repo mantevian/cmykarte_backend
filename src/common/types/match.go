@@ -12,8 +12,24 @@ type Match struct {
 	Round     int
 	Turn      enums.CardType
 	Field     Field
+	Rules     MatchRules
 	Finished  bool
 	StartedAt time.Time
+}
+
+type MatchRules struct {
+	StartingHandSize       int             `json:"starting_hand_size"`
+	GuaranteedStartingCost int             `json:"guaranteed_starting_cost"`
+	HandLimit              int             `json:"hand_limit"`
+	RoundDraws             []RoundDrawRule `json:"round_draws"`
+}
+
+type RoundDrawRule struct {
+	FromRound     int  `json:"from_round"`
+	ToRound       *int `json:"to_round,omitempty"`
+	MinCost       int  `json:"min_cost"`
+	MaxCost       *int `json:"max_cost,omitempty"`
+	CardsPerRound int  `json:"cards_per_round"`
 }
 
 type MatchStartedMessage struct {
@@ -23,6 +39,7 @@ type MatchStartedMessage struct {
 	Round     int            `json:"round"`
 	Turn      enums.CardType `json:"turn"`
 	Field     Field          `json:"field"`
+	Rules     MatchRules     `json:"rules"`
 }
 
 type EndTurnRequest struct {
@@ -42,6 +59,7 @@ type MatchInfoForGroupMessage struct {
 	Round     int            `json:"round"`
 	Turn      enums.CardType `json:"turn"`
 	Field     Field          `json:"field"`
+	Rules     MatchRules     `json:"rules"`
 }
 
 type MatchEndedMessage struct {

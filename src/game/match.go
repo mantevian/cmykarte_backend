@@ -14,6 +14,7 @@ import (
 )
 
 const winningScore = 13
+const defaultHandLimit = 10
 
 var (
 	matchesMu sync.RWMutex
@@ -22,6 +23,7 @@ var (
 
 func StartMatch(queuedPlayer1 QueuedPlayer, queuedPlayer2 QueuedPlayer) (matchId string) {
 	matchId = fmt.Sprintf("match_%s", uuid.NewV4())
+	rules := defaultMatchRules()
 
 	playerRGB := types.Player{
 		UserId:   queuedPlayer1.UserId,
@@ -30,7 +32,7 @@ func StartMatch(queuedPlayer1 QueuedPlayer, queuedPlayer2 QueuedPlayer) (matchId
 		Money:    1,
 		Deck:     Shuffle(CreateRGBDeck()),
 	}
-	DrawCards(&playerRGB, 3)
+	drawStartingHand(&playerRGB, rules)
 
 	playerCMY := types.Player{
 		UserId:   queuedPlayer2.UserId,
@@ -39,7 +41,7 @@ func StartMatch(queuedPlayer1 QueuedPlayer, queuedPlayer2 QueuedPlayer) (matchId
 		Money:    1,
 		Deck:     Shuffle(CreateCMYDeck()),
 	}
-	DrawCards(&playerCMY, 3)
+	drawStartingHand(&playerCMY, rules)
 
 	if rand.Int()%2 == 0 {
 		playerRGB.UserId, playerCMY.UserId = playerCMY.UserId, playerRGB.UserId
@@ -52,6 +54,7 @@ func StartMatch(queuedPlayer1 QueuedPlayer, queuedPlayer2 QueuedPlayer) (matchId
 		Round:     1,
 		Turn:      enums.CardTypeRGB,
 		Field:     NewField(),
+		Rules:     rules,
 		StartedAt: time.Now(),
 	}
 
@@ -69,6 +72,7 @@ func StartMatch(queuedPlayer1 QueuedPlayer, queuedPlayer2 QueuedPlayer) (matchId
 		Round:     match.Round,
 		Turn:      match.Turn,
 		Field:     match.Field,
+		Rules:     match.Rules,
 	})
 
 	ws.SendToUser(playerRGB.UserId, "match_info_for_player", types.MatchInfoForPlayerMessage{
@@ -109,8 +113,16 @@ func EndTurn(matchId string, userId types.Uuid) bool {
 		match.Round++
 		match.Turn = enums.CardTypeRGB
 		match.PlayerRGB.Money = match.Round
-		DrawCards(&match.PlayerRGB, 2)
-		DrawCards(&match.PlayerCMY, 2)
+		if match.Rules.HandLimit == 0 {
+			match.Rules = defaultMatchRules()
+		}
+		for _, rule := range match.Rules.RoundDraws {
+			if match.Round >= rule.FromRound && (rule.ToRound == nil || match.Round <= *rule.ToRound) {
+				drawCardsForRound(&match.PlayerRGB, rule.CardsPerRound, match.Round, match.Rules)
+				drawCardsForRound(&match.PlayerCMY, rule.CardsPerRound, match.Round, match.Rules)
+				break
+			}
+		}
 	default:
 		matchesMu.Unlock()
 		return false
@@ -299,6 +311,9 @@ func clampChannel(channel int) int {
 }
 
 func publishMatchState(matchId string, match types.Match) {
+	if match.Rules.HandLimit == 0 {
+		match.Rules = defaultMatchRules()
+	}
 	ws.Broadcast(matchId, "match_info_for_group", types.MatchInfoForGroupMessage{
 		MatchId:   matchId,
 		PlayerRGB: publicPlayer(match.PlayerRGB),
@@ -306,6 +321,7 @@ func publishMatchState(matchId string, match types.Match) {
 		Round:     match.Round,
 		Turn:      match.Turn,
 		Field:     match.Field,
+		Rules:     match.Rules,
 	})
 
 	ws.SendToUser(match.PlayerRGB.UserId, "match_info_for_player", types.MatchInfoForPlayerMessage{
@@ -316,6 +332,26 @@ func publishMatchState(matchId string, match types.Match) {
 		MatchId: matchId,
 		Hand:    match.PlayerCMY.Hand,
 	})
+}
+
+func defaultMatchRules() types.MatchRules {
+	round5 := 5
+	round10 := 10
+	round20 := 20
+	cost3 := 3
+	cost5 := 5
+	cost7 := 7
+	return types.MatchRules{
+		StartingHandSize:       4,
+		GuaranteedStartingCost: 1,
+		HandLimit:              defaultHandLimit,
+		RoundDraws: []types.RoundDrawRule{
+			{FromRound: 1, ToRound: &round5, MinCost: 1, MaxCost: &cost3, CardsPerRound: 1},
+			{FromRound: 6, ToRound: &round10, MinCost: 2, MaxCost: &cost5, CardsPerRound: 2},
+			{FromRound: 11, ToRound: &round20, MinCost: 3, MaxCost: &cost7, CardsPerRound: 2},
+			{FromRound: 21, MinCost: 4, CardsPerRound: 3},
+		},
+	}
 }
 
 func publicPlayer(player types.Player) types.PublicPlayer {
