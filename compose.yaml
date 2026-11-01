@@ -53,13 +53,9 @@ services:
     environment:
       PORT: 8080
       POSTGRES_URL: ${POSTGRES_URL}
-      DEBUG: true
       BUILD_VERSION: ${BUILD_VERSION:-unknown}
     ports:
       - "8080:8080"
-    volumes:
-      - ./src:/app/src
-      - go-mod-cache:/go/pkg/mod
     depends_on:
       postgres:
         condition: service_healthy

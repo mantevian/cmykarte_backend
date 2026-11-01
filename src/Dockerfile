@@ -1,12 +1,21 @@
-FROM golang:1.27-alpine
+FROM golang:1.27-alpine AS build
 
-RUN apk add --no-cache git
+WORKDIR /src
 
-RUN go install github.com/air-verse/air@latest
+COPY src/go.mod src/go.sum ./
+RUN go mod download
 
-WORKDIR /app
+COPY src/ ./
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/game .
 
-COPY src/ /app/src/
-RUN cd src && go mod download
+FROM alpine:3.22
 
-CMD sh -c "cd /app/src && air"
+RUN apk add --no-cache ca-certificates \
+    && addgroup -S app \
+    && adduser -S -G app app
+
+COPY --from=build /out/game /usr/local/bin/game
+
+USER app
+EXPOSE 8080
+ENTRYPOINT ["game"]

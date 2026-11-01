@@ -8,11 +8,50 @@ Set the existing database and pgAdmin values, plus `METABASE_DB_PASSWORD`,
 password before starting the services. Use a valid email address and a unique,
 uncommon Metabase admin password of at least 12 characters.
 
-Start the services with `docker compose up --build`. Metabase is available at
+Start the services with `docker compose -f compose.yaml -f compose.dev.yaml up --build`
+for development with Go hot reload. To run the production-style container
+locally, use `docker compose up --build`. Metabase is available at
 http://localhost:3000 and the game server at http://localhost:8080. Metabase
 binds to localhost and requires the configured admin login. On first startup,
 the provisioner creates a read-only PostgreSQL connection and the Match Health,
 Card Balance, and Gameplay Progression dashboards.
+
+## Deploying to an Alpine server
+
+The GitHub Actions workflow runs the Go tests on pushes to `main`, then deploys
+over SSH only when those tests pass. On Alpine, install the required packages
+and enable Docker and SSH at boot:
+
+```sh
+apk add docker docker-cli-compose git openssh
+rc-update add docker default
+rc-update add sshd default
+service docker start
+service sshd start
+```
+
+Clone this repository into a deployment directory, check out `main`, and create
+that directory's `.env` from `.env.example` with unique, strong passwords. Keep
+`.env` on the server; it is ignored by Git. The SSH deployment user needs the
+matching public key in `~/.ssh/authorized_keys`, access to the repository, and
+membership in the Docker group.
+
+Add these repository Actions secrets under **Settings → Secrets and variables
+→ Actions**:
+
+- `DEPLOY_HOST`: the server's reachable hostname or IP.
+- `DEPLOY_USER`: the SSH account used for deployment.
+- `DEPLOY_SSH_KEY`: that account's private SSH key.
+- `DEPLOY_KNOWN_HOSTS`: the server's SSH host-key entry, obtained and verified
+  through a trusted channel.
+- `DEPLOY_PATH`: the absolute path to the server's repository checkout (use a
+  path without spaces or single quotes).
+
+The server must be reachable over SSH from GitHub-hosted runners, and its
+checkout must have an `origin` remote with a `main` branch. Each deployment
+fast-forwards that checkout, builds the production Go image, and starts the
+Compose services. Database and Metabase volumes are retained. The deployed
+game's `BUILD_VERSION` is set to the short Git commit hash.
 
 If Metabase rejects the admin credentials during initial setup, update
 `METABASE_ADMIN_EMAIL` and `METABASE_ADMIN_PASSWORD` in `.env`, then rerun the

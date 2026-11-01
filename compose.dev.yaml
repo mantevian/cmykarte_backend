@@ -1,0 +1,8 @@
+services:
+  game:
+    build:
+      context: .
+      dockerfile: ./src/Dockerfile.dev
+    volumes:
+      - ./src:/app/src
+      - go-mod-cache:/go/pkg/mod
