@@ -31,3 +31,23 @@ Completed matches and disconnect-abandoned matches are recorded in `matches`.
 Accepted card plays and end-turn actions are recorded in `match_events`.
 `BUILD_VERSION` can be set on the game service to tag analytics with a deployed
 build; the ruleset is tagged with the current version in the game code.
+
+Unity error, assertion, and exception logs are queued locally and submitted to
+`POST /crash-reports`; failed uploads remain queued for the next launch. A
+marker also reports an unclean previous shutdown, which can indicate a native
+crash or forced termination but cannot provide a native crash dump.
+Crash reports include the message, stack trace, app/Unity versions, platform,
+and active scene, but do not include player IDs or credentials. The provisioner
+creates a Crash Reports dashboard with report trends, build/platform breakdowns,
+frequent messages, and recent stack traces.
+Exception messages and stack traces can still contain runtime data; do not put
+secrets or sensitive user input in application error messages.
+
+For an existing PostgreSQL volume, apply
+`postgres/migrations/001_crash_reports.sql` before deploying the updated game
+server, then rerun the `metabase-provisioner` service to create the dashboard.
+The Unity server defaults to `http://localhost:8080` for local development.
+Pass `-server-url=https://your-game-server.example.com` in the player launch
+arguments to use a deployed backend; the WebSocket connection automatically
+uses `wss` for HTTPS. Put a TLS-terminating reverse proxy in front of the Go
+server before accepting public Internet traffic.

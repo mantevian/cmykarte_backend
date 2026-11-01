@@ -48,9 +48,22 @@ create table match_events (
 	created_at timestamptz not null default now()
 );
 
+create table crash_reports (
+	report_id uuid primary key,
+	received_at timestamptz not null default now(),
+	report_type text not null check (report_type in ('Error', 'Assert', 'Exception', 'Crash')),
+	message text not null,
+	stack_trace text not null,
+	app_version text not null,
+	unity_version text not null,
+	platform text not null,
+	scene text not null
+);
+
 create index match_events_match_order_idx on match_events (match_id, id);
 create index match_events_card_idx on match_events (event_type, card_type, card_cost);
 create index matches_started_at_idx on matches (started_at);
+create index crash_reports_received_at_idx on crash_reports (received_at);
 
 create view analytics_match_health as
 select
@@ -119,5 +132,5 @@ where e.event_type = 'turn_ended';
 create role metabase_readonly login password :'metabase_db_password';
 grant connect on database :"postgres_db" to metabase_readonly;
 grant usage on schema public to metabase_readonly;
-grant select on matches, match_events, analytics_match_health, analytics_card_usage, analytics_turns
+grant select on matches, match_events, crash_reports, analytics_match_health, analytics_card_usage, analytics_turns
 	to metabase_readonly;

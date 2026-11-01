@@ -225,15 +225,33 @@ CARDS = [
     {
         "name": "Match wins by card cost",
         "display": "bar",
+        "description": (
+            "For each side and printed card cost, the percentage of completed matches "
+            "where that side played at least one card of that cost and won. Each match "
+            "counts once per side and cost; matches_with_card is the denominator. This "
+            "is an observed association, not a causal measure of a card's effect."
+        ),
+        "visualization_settings": {
+            "graph.dimensions": ["card_cost", "player_side"],
+            "graph.metrics": ["match_win_rate_percent"],
+            "graph.x_axis.scale": "ordinal",
+        },
         "query": """
+            with match_card_costs as (
+                select distinct match_id, player_side, card_cost, winner_side
+                from analytics_card_usage
+                where match_status = 'completed'
+            )
             select
                 player_side,
                 card_cost,
-                count(*) as plays,
-                round(100.0 * count(*) filter (where winner_side = player_side) / count(*), 1)
-                    as winning_match_percent
-            from analytics_card_usage
-            where match_status = 'completed'
+                count(*) as matches_with_card,
+                count(*) filter (where winner_side = player_side) as matches_won,
+                round(
+                    100.0 * count(*) filter (where winner_side = player_side) / count(*),
+                    1
+                ) as match_win_rate_percent
+            from match_card_costs
             group by player_side, card_cost
             order by card_cost, player_side
         """,
@@ -242,18 +260,33 @@ CARDS = [
         "name": "Card outcomes by attributes",
         "display": "table",
         "query": """
+            with match_card_attributes as (
+                select distinct
+                    match_id,
+                    player_side,
+                    card_type,
+                    card_cost,
+                    card_color,
+                    card_pattern,
+                    winner_side
+                from analytics_card_usage
+                where match_status = 'completed'
+            )
             select
+                player_side,
                 card_type,
                 card_cost,
                 card_color,
                 card_pattern,
-                count(*) as plays,
-                round(100.0 * count(*) filter (where winner_side = player_side) / count(*), 1)
-                    as winning_match_percent
-            from analytics_card_usage
-            where match_status = 'completed'
-            group by card_type, card_cost, card_color, card_pattern, player_side
-            order by plays desc
+                count(*) as matches_with_card,
+                count(*) filter (where winner_side = player_side) as matches_won,
+                round(
+                    100.0 * count(*) filter (where winner_side = player_side) / count(*),
+                    1
+                ) as match_win_rate_percent
+            from match_card_attributes
+            group by player_side, card_type, card_cost, card_color, card_pattern
+            order by matches_with_card desc
             limit 50
         """,
     },
@@ -328,6 +361,55 @@ CARDS = [
             limit 100
         """,
     },
+    {
+        "name": "Crash reports by day",
+        "display": "line",
+        "query": """
+            select date_trunc('day', received_at) as report_day, count(*) as reports
+            from crash_reports
+            group by report_day
+            order by report_day
+        """,
+    },
+    {
+        "name": "Crash reports by build and platform",
+        "display": "table",
+        "query": """
+            select app_version, platform, report_type, count(*) as reports
+            from crash_reports
+            group by app_version, platform, report_type
+            order by reports desc, app_version, platform
+        """,
+    },
+    {
+        "name": "Most frequent crash messages",
+        "display": "table",
+        "query": """
+            select report_type, app_version, platform, message, count(*) as reports
+            from crash_reports
+            group by report_type, app_version, platform, message
+            order by reports desc, message
+            limit 50
+        """,
+    },
+    {
+        "name": "Recent crash reports",
+        "display": "table",
+        "query": """
+            select
+                received_at,
+                report_type,
+                app_version,
+                unity_version,
+                platform,
+                scene,
+                message,
+                stack_trace
+            from crash_reports
+            order by received_at desc
+            limit 100
+        """,
+    },
 ]
 
 DASHBOARDS = {
@@ -350,6 +432,12 @@ DASHBOARDS = {
         "Turns and rounds per match",
         "Card plays per match",
     ],
+    "Crash Reports": [
+        "Crash reports by day",
+        "Crash reports by build and platform",
+        "Most frequent crash messages",
+        "Recent crash reports",
+    ],
 }
 
 
@@ -360,14 +448,24 @@ def get_or_create_cards(session, database_id):
         if definition["name"] in cards:
             card = cards[definition["name"]]
             visualization_settings = definition.get("visualization_settings")
-            if (
-                visualization_settings is not None
-                and card.get("visualization_settings") != visualization_settings
-            ):
+            expected_query = definition["query"].strip()
+            saved_query = card.get("dataset_query", {}).get("native", {}).get("query", "").strip()
+            update = {}
+            if saved_query != expected_query:
+                update["dataset_query"] = {
+                    "database": database_id,
+                    "type": "native",
+                    "native": {"query": definition["query"]},
+                }
+            if visualization_settings is not None and card.get("visualization_settings") != visualization_settings:
+                update["visualization_settings"] = visualization_settings
+            if definition.get("description") != card.get("description"):
+                update["description"] = definition["description"]
+            if update:
                 updated = request(
                     "PUT",
                     f"/api/card/{card['id']}",
-                    {"visualization_settings": visualization_settings},
+                    update,
                     session,
                 )
                 cards[definition["name"]] = updated

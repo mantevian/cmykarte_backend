@@ -28,6 +28,7 @@ func main() {
 	game.SetPersistenceDB(db)
 
 	http.HandleFunc("/ws", handler.HandleWs(db))
+	http.HandleFunc("/crash-reports", handler.HandleCrashReport(db))
 
 	go game.StartLookingForMatches()
 

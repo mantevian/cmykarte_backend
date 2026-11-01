@@ -194,6 +194,26 @@ func TestDecksContainCostSixThroughEightCards(t *testing.T) {
 			if len(deck) <= 90 {
 				t.Fatalf("deck has %d cards, want more than 90", len(deck))
 			}
+			eightCostCount := 0
+			hasExtraPowerfulEightCostCard := false
+			for _, card := range deck {
+				if card.Cost == 8 {
+					eightCostCount++
+					if card.Color.R == 20 || card.Color.G == 20 || card.Color.B == 20 {
+						hasExtraPowerfulEightCostCard = true
+					}
+				}
+				if card.Cost == 1 && len(card.Pattern) == 1 &&
+					(card.Color == types.NewColor(4, 0, 0) || card.Color == types.NewColor(2, 2, 2)) {
+					t.Errorf("deck still contains an original 1-cost card: %+v", card)
+				}
+			}
+			if eightCostCount < 6 {
+				t.Errorf("deck has %d new 8-cost cards, want at least 6", eightCostCount)
+			}
+			if !hasExtraPowerfulEightCostCard {
+				t.Error("deck has no extra-powerful 8-cost card")
+			}
 			for _, cost := range []int{6, 7, 8} {
 				count := 0
 				for _, card := range deck {
