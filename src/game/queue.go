@@ -49,7 +49,11 @@ func StartLookingForMatches() {
 func startQueuedMatch() {
 	found, player1, player2 := TakeMatch()
 	if found {
-		StartMatch(player1, player2)
+		if _, err := StartMatch(player1, player2); err != nil {
+			log.Printf("failed to start match: %v", err)
+			AddQueueEntry(player1.UserId, player1.Username)
+			AddQueueEntry(player2.UserId, player2.Username)
+		}
 	}
 }
 

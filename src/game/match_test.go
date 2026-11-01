@@ -95,15 +95,14 @@ func TestEndTurnDrawsCardsForUpcomingRound(t *testing.T) {
 		name          string
 		previousRound int
 		wantCount     int
-		minCost       int
 		maxCost       int
 	}{
-		{name: "round 5", previousRound: 4, wantCount: 1, minCost: 1, maxCost: 3},
-		{name: "round 6", previousRound: 5, wantCount: 2, minCost: 2, maxCost: 5},
-		{name: "round 10", previousRound: 9, wantCount: 2, minCost: 2, maxCost: 5},
-		{name: "round 11", previousRound: 10, wantCount: 2, minCost: 3, maxCost: 7},
-		{name: "round 20", previousRound: 19, wantCount: 2, minCost: 3, maxCost: 7},
-		{name: "round 21", previousRound: 20, wantCount: 3, minCost: 4, maxCost: 8},
+		{name: "round 5", previousRound: 4, wantCount: 1, maxCost: 3},
+		{name: "round 6", previousRound: 5, wantCount: 2, maxCost: 5},
+		{name: "round 10", previousRound: 9, wantCount: 2, maxCost: 5},
+		{name: "round 11", previousRound: 10, wantCount: 2, maxCost: 7},
+		{name: "round 20", previousRound: 19, wantCount: 2, maxCost: 7},
+		{name: "round 21", previousRound: 20, wantCount: 3, maxCost: 8},
 	}
 
 	for _, tt := range tests {
@@ -136,12 +135,38 @@ func TestEndTurnDrawsCardsForUpcomingRound(t *testing.T) {
 					t.Errorf("%s drew %d cards, want %d", name, len(player.Hand), tt.wantCount)
 				}
 				for _, card := range player.Hand {
-					if card.Cost < tt.minCost || card.Cost > tt.maxCost {
+					if card.Cost > tt.maxCost {
 						t.Errorf("%s drew cost %d during round %d", name, card.Cost, match.Round)
 					}
 				}
+				if len(player.Hand) > 0 && player.Hand[0].Cost != 1 {
+					t.Errorf("%s first drew cost %d during round %d, want cost 1 now that minimum costs are removed", name, player.Hand[0].Cost, match.Round)
+				}
 			}
 		})
+	}
+}
+
+func TestRoundDrawRecreatesAnEmptyDeck(t *testing.T) {
+	player := types.Player{
+		Type: enums.CardTypeRGB,
+		Deck: []types.Card{{Type: enums.CardTypeRGB, Cost: 1}},
+	}
+
+	if err := DrawCardsForRound(&player, 2, 21); err != nil {
+		t.Fatalf("draw cards from recreated deck: %v", err)
+	}
+
+	if len(player.Hand) != 2 {
+		t.Fatalf("hand has %d cards, want 2", len(player.Hand))
+	}
+	if want := len(CreateRGBDeck()) - 1; len(player.Deck) != want {
+		t.Fatalf("recreated RGB deck has %d cards remaining, want %d", len(player.Deck), want)
+	}
+	for _, card := range player.Hand {
+		if card.Type != enums.CardTypeRGB {
+			t.Errorf("recreated RGB deck produced card type %q", card.Type)
+		}
 	}
 }
 

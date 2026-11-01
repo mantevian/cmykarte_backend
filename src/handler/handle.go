@@ -44,7 +44,14 @@ func HandleWs(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
 
 		ws.AddClient("", &client)
 
-		defer ws.RemoveClient(id)
+		defer func() {
+			if client.UserId != "" {
+				if err := game.AbandonMatchesForUser(client.UserId); err != nil {
+					log.Printf("failed to persist match abandonment for user %s: %v", client.UserId, err)
+				}
+			}
+			ws.RemoveClient(id)
+		}()
 
 		var ctx = types.FunctionCallCtx{
 			DB: db,
@@ -102,10 +109,10 @@ func HandleWs(db *sql.DB) func(w http.ResponseWriter, r *http.Request) {
 				case "end_turn":
 					var req types.EndTurnRequest
 					json.Unmarshal(message.Payload, &req)
-					if game.EndTurn(req.MatchId, ctx.UserId) {
+					if err := game.EndTurnWithError(req.MatchId, ctx.UserId); err == nil {
 						res = types.GenericResponseSuccess("")
 					} else {
-						res = types.GenericResponseError("Unable to end turn")
+						res = types.GenericResponseError(err.Error())
 					}
 				case "play_card":
 					var req types.PlayCardRequest

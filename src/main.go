@@ -19,6 +19,13 @@ func main() {
 		log.Fatal(err)
 	}
 	defer db.Close()
+	if err := db.Ping(); err != nil {
+		log.Fatal(err)
+	}
+	if err := game.CloseInterruptedMatches(db); err != nil {
+		log.Fatal(err)
+	}
+	game.SetPersistenceDB(db)
 
 	http.HandleFunc("/ws", handler.HandleWs(db))
 

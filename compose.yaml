@@ -7,6 +7,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_URL: ${POSTGRES_URL}
+      METABASE_DB_PASSWORD: ${METABASE_DB_PASSWORD:?Set METABASE_DB_PASSWORD in .env}
     env_file:
       - .env
     ports:
@@ -53,11 +54,50 @@ services:
       PORT: 8080
       POSTGRES_URL: ${POSTGRES_URL}
       DEBUG: true
+      BUILD_VERSION: ${BUILD_VERSION:-unknown}
     ports:
       - "8080:8080"
     volumes:
       - ./src:/app/src
       - go-mod-cache:/go/pkg/mod
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - cmykarte-network
+
+  metabase:
+    image: metabase/metabase:v0.55.6
+    container_name: metabase
+    environment:
+      MB_DB_FILE: /metabase-data/metabase.db
+      MB_SITE_URL: http://localhost:3000
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - metabase-data:/metabase-data
+    restart: unless-stopped
+    networks:
+      - cmykarte-network
+
+  metabase-provisioner:
+    image: python:3.13-alpine
+    container_name: metabase-provisioner
+    command: ["python", "/provision.py"]
+    environment:
+      METABASE_URL: http://metabase:3000
+      METABASE_ADMIN_EMAIL: ${METABASE_ADMIN_EMAIL:?Set METABASE_ADMIN_EMAIL in .env}
+      METABASE_ADMIN_PASSWORD: ${METABASE_ADMIN_PASSWORD:?Set METABASE_ADMIN_PASSWORD in .env}
+      METABASE_DB_PASSWORD: ${METABASE_DB_PASSWORD:?Set METABASE_DB_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - ./metabase/provision.py:/provision.py:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      metabase:
+        condition: service_started
+    restart: on-failure
     networks:
       - cmykarte-network
 
@@ -69,3 +109,4 @@ volumes:
   go-mod-cache:
   postgres-data:
   pgadmin-data:
+  metabase-data:

@@ -27,7 +27,6 @@ type MatchRules struct {
 type RoundDrawRule struct {
 	FromRound     int  `json:"from_round"`
 	ToRound       *int `json:"to_round,omitempty"`
-	MinCost       int  `json:"min_cost"`
 	MaxCost       *int `json:"max_cost,omitempty"`
 	CardsPerRound int  `json:"cards_per_round"`
 }

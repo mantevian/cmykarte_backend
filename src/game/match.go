@@ -21,7 +21,7 @@ var (
 	Matches   = make(map[string]types.Match)
 )
 
-func StartMatch(queuedPlayer1 QueuedPlayer, queuedPlayer2 QueuedPlayer) (matchId string) {
+func StartMatch(queuedPlayer1 QueuedPlayer, queuedPlayer2 QueuedPlayer) (matchId string, err error) {
 	matchId = fmt.Sprintf("match_%s", uuid.NewV4())
 	rules := defaultMatchRules()
 
@@ -32,7 +32,9 @@ func StartMatch(queuedPlayer1 QueuedPlayer, queuedPlayer2 QueuedPlayer) (matchId
 		Money:    1,
 		Deck:     Shuffle(CreateRGBDeck()),
 	}
-	drawStartingHand(&playerRGB, rules)
+	if err := drawStartingHand(&playerRGB, rules); err != nil {
+		return "", fmt.Errorf("draw RGB starting hand: %w", err)
+	}
 
 	playerCMY := types.Player{
 		UserId:   queuedPlayer2.UserId,
@@ -41,7 +43,9 @@ func StartMatch(queuedPlayer1 QueuedPlayer, queuedPlayer2 QueuedPlayer) (matchId
 		Money:    1,
 		Deck:     Shuffle(CreateCMYDeck()),
 	}
-	drawStartingHand(&playerCMY, rules)
+	if err := drawStartingHand(&playerCMY, rules); err != nil {
+		return "", fmt.Errorf("draw CMY starting hand: %w", err)
+	}
 
 	if rand.Int()%2 == 0 {
 		playerRGB.UserId, playerCMY.UserId = playerCMY.UserId, playerRGB.UserId
@@ -56,6 +60,10 @@ func StartMatch(queuedPlayer1 QueuedPlayer, queuedPlayer2 QueuedPlayer) (matchId
 		Field:     NewField(),
 		Rules:     rules,
 		StartedAt: time.Now(),
+	}
+
+	if err := persistMatchStart(matchId, match); err != nil {
+		return "", fmt.Errorf("persist match start: %w", err)
 	}
 
 	matchesMu.Lock()
@@ -88,51 +96,74 @@ func StartMatch(queuedPlayer1 QueuedPlayer, queuedPlayer2 QueuedPlayer) (matchId
 }
 
 func EndTurn(matchId string, userId types.Uuid) bool {
+	return EndTurnWithError(matchId, userId) == nil
+}
+
+func EndTurnWithError(matchId string, userId types.Uuid) error {
 	matchesMu.Lock()
 	match, ok := Matches[matchId]
 	if !ok || match.Finished {
 		matchesMu.Unlock()
-		return false
+		return errors.New("match not found or has ended")
 	}
 
-	switch match.Turn {
+	candidate := cloneMatch(match)
+	var activePlayer types.Player
+	switch candidate.Turn {
 	case enums.CardTypeRGB:
-		if match.PlayerRGB.UserId != userId {
+		if candidate.PlayerRGB.UserId != userId {
 			matchesMu.Unlock()
-			return false
+			return errors.New("it is not this player's turn")
 		}
-		match.PlayerRGB.Money = 0
-		match.Turn = enums.CardTypeCMY
-		match.PlayerCMY.Money = match.Round
+		activePlayer = candidate.PlayerRGB
+		candidate.PlayerRGB.Money = 0
+		candidate.Turn = enums.CardTypeCMY
+		candidate.PlayerCMY.Money = candidate.Round
 	case enums.CardTypeCMY:
-		if match.PlayerCMY.UserId != userId {
+		if candidate.PlayerCMY.UserId != userId {
 			matchesMu.Unlock()
-			return false
+			return errors.New("it is not this player's turn")
 		}
-		match.PlayerCMY.Money = 0
-		match.Round++
-		match.Turn = enums.CardTypeRGB
-		match.PlayerRGB.Money = match.Round
-		if match.Rules.HandLimit == 0 {
-			match.Rules = defaultMatchRules()
+		activePlayer = candidate.PlayerCMY
+		candidate.PlayerCMY.Money = 0
+		candidate.Round++
+		candidate.Turn = enums.CardTypeRGB
+		candidate.PlayerRGB.Money = candidate.Round
+		if candidate.Rules.HandLimit == 0 {
+			candidate.Rules = defaultMatchRules()
 		}
-		for _, rule := range match.Rules.RoundDraws {
-			if match.Round >= rule.FromRound && (rule.ToRound == nil || match.Round <= *rule.ToRound) {
-				drawCardsForRound(&match.PlayerRGB, rule.CardsPerRound, match.Round, match.Rules)
-				drawCardsForRound(&match.PlayerCMY, rule.CardsPerRound, match.Round, match.Rules)
+		for _, rule := range candidate.Rules.RoundDraws {
+			if candidate.Round >= rule.FromRound && (rule.ToRound == nil || candidate.Round <= *rule.ToRound) {
+				if err := drawCardsForRound(&candidate.PlayerRGB, rule.CardsPerRound, candidate.Round, candidate.Rules); err != nil {
+					matchesMu.Unlock()
+					return fmt.Errorf("draw RGB round cards: %w", err)
+				}
+				if err := drawCardsForRound(&candidate.PlayerCMY, rule.CardsPerRound, candidate.Round, candidate.Rules); err != nil {
+					matchesMu.Unlock()
+					return fmt.Errorf("draw CMY round cards: %w", err)
+				}
 				break
 			}
 		}
 	default:
 		matchesMu.Unlock()
-		return false
+		return errors.New("match has an invalid turn")
 	}
 
-	Matches[matchId] = match
+	if err := persistMatchTransition(matchId, candidate, matchEvent{
+		eventType: "turn_ended",
+		player:    activePlayer,
+		round:     match.Round,
+		outcome:   map[string]any{"round_advanced": candidate.Round != match.Round},
+	}, "", nil); err != nil {
+		matchesMu.Unlock()
+		return fmt.Errorf("persist turn end: %w", err)
+	}
+	Matches[matchId] = candidate
 	matchesMu.Unlock()
 
-	publishMatchState(matchId, match)
-	return true
+	publishMatchState(matchId, candidate)
+	return nil
 }
 
 func PlayCard(matchId string, userId types.Uuid, cardIndex int, tile types.Vec2) error {
@@ -147,20 +178,21 @@ func PlayCard(matchId string, userId types.Uuid, cardIndex int, tile types.Vec2)
 		return errors.New("match has ended")
 	}
 
+	candidate := cloneMatch(match)
 	var activePlayer *types.Player
-	switch match.Turn {
+	switch candidate.Turn {
 	case enums.CardTypeRGB:
-		if match.PlayerRGB.UserId != userId {
+		if candidate.PlayerRGB.UserId != userId {
 			matchesMu.Unlock()
 			return errors.New("it is not this player's turn")
 		}
-		activePlayer = &match.PlayerRGB
+		activePlayer = &candidate.PlayerRGB
 	case enums.CardTypeCMY:
-		if match.PlayerCMY.UserId != userId {
+		if candidate.PlayerCMY.UserId != userId {
 			matchesMu.Unlock()
 			return errors.New("it is not this player's turn")
 		}
-		activePlayer = &match.PlayerCMY
+		activePlayer = &candidate.PlayerCMY
 	default:
 		matchesMu.Unlock()
 		return errors.New("match has an invalid turn")
@@ -177,51 +209,81 @@ func PlayCard(matchId string, userId types.Uuid, cardIndex int, tile types.Vec2)
 		return errors.New("not enough money to play this card")
 	}
 
-	changes, err := cardFieldChanges(match.Field, card, tile)
+	changes, err := cardFieldChanges(candidate.Field, card, tile)
 	if err != nil {
 		matchesMu.Unlock()
 		return err
 	}
 
-	initializeFieldClaims(&match.Field)
+	rgbScoreBefore := candidate.PlayerRGB.Score
+	cmyScoreBefore := candidate.PlayerCMY.Score
+	initializeFieldClaims(&candidate.Field)
+	claimedTiles := 0
 	for _, change := range changes {
-		if match.Field.ClaimedBy[change.tile] != "" {
+		if candidate.Field.ClaimedBy[change.tile] != "" {
 			continue
 		}
 
 		color := clampColor(change.color)
-		match.Field.Tiles[change.tile] = color
+		candidate.Field.Tiles[change.tile] = color
 		switch color {
 		case types.NewColor(20, 20, 20):
-			match.Field.ClaimedBy[change.tile] = enums.CardTypeRGB
-			match.PlayerRGB.Score++
+			candidate.Field.ClaimedBy[change.tile] = enums.CardTypeRGB
+			candidate.PlayerRGB.Score++
+			claimedTiles++
 		case types.NewColor(0, 0, 0):
-			match.Field.ClaimedBy[change.tile] = enums.CardTypeCMY
-			match.PlayerCMY.Score++
+			candidate.Field.ClaimedBy[change.tile] = enums.CardTypeCMY
+			candidate.PlayerCMY.Score++
+			claimedTiles++
 		}
 	}
 	activePlayer.Money -= card.Cost
 	activePlayer.Hand = append(activePlayer.Hand[:cardIndex], activePlayer.Hand[cardIndex+1:]...)
 	var winner *types.Player
-	if match.PlayerRGB.Score >= winningScore {
-		winner = &match.PlayerRGB
-	} else if match.PlayerCMY.Score >= winningScore {
-		winner = &match.PlayerCMY
+	if candidate.PlayerRGB.Score >= winningScore {
+		winner = &candidate.PlayerRGB
+	} else if candidate.PlayerCMY.Score >= winningScore {
+		winner = &candidate.PlayerCMY
 	}
 	if winner != nil {
-		match.Finished = true
+		candidate.Finished = true
 	}
-	Matches[matchId] = match
+	endReason := ""
+	if winner != nil {
+		endReason = "victory"
+	}
+	outcome := map[string]any{
+		"tiles_changed":   len(changes),
+		"tiles_claimed":   claimedTiles,
+		"rgb_score_delta": candidate.PlayerRGB.Score - rgbScoreBefore,
+		"cmy_score_delta": candidate.PlayerCMY.Score - cmyScoreBefore,
+		"winner_side":     "",
+	}
+	if winner != nil {
+		outcome["winner_side"] = winner.Type
+	}
+	if err := persistMatchTransition(matchId, candidate, matchEvent{
+		eventType: "card_played",
+		player:    *activePlayer,
+		round:     candidate.Round,
+		card:      &card,
+		target:    &tile,
+		outcome:   outcome,
+	}, endReason, winner); err != nil {
+		matchesMu.Unlock()
+		return fmt.Errorf("persist card play: %w", err)
+	}
+	Matches[matchId] = candidate
 	matchesMu.Unlock()
 
-	publishMatchState(matchId, match)
+	publishMatchState(matchId, candidate)
 	if winner != nil {
 		ws.Broadcast(matchId, "match_ended", types.MatchEndedMessage{
 			MatchId:   matchId,
 			Winner:    publicPlayer(*winner),
-			PlayerRGB: publicPlayer(match.PlayerRGB),
-			PlayerCMY: publicPlayer(match.PlayerCMY),
-			Field:     match.Field,
+			PlayerRGB: publicPlayer(candidate.PlayerRGB),
+			PlayerCMY: publicPlayer(candidate.PlayerCMY),
+			Field:     candidate.Field,
 		})
 	}
 	return nil
@@ -346,10 +408,10 @@ func defaultMatchRules() types.MatchRules {
 		GuaranteedStartingCost: 1,
 		HandLimit:              defaultHandLimit,
 		RoundDraws: []types.RoundDrawRule{
-			{FromRound: 1, ToRound: &round5, MinCost: 1, MaxCost: &cost3, CardsPerRound: 1},
-			{FromRound: 6, ToRound: &round10, MinCost: 2, MaxCost: &cost5, CardsPerRound: 2},
-			{FromRound: 11, ToRound: &round20, MinCost: 3, MaxCost: &cost7, CardsPerRound: 2},
-			{FromRound: 21, MinCost: 4, CardsPerRound: 3},
+			{FromRound: 1, ToRound: &round5, MaxCost: &cost3, CardsPerRound: 1},
+			{FromRound: 6, ToRound: &round10, MaxCost: &cost5, CardsPerRound: 2},
+			{FromRound: 11, ToRound: &round20, MaxCost: &cost7, CardsPerRound: 2},
+			{FromRound: 21, CardsPerRound: 3},
 		},
 	}
 }
