@@ -1,7 +1,7 @@
 services:
   postgres:
     image: postgres:17-alpine
-    container_name: postgres_container
+    container_name: cmykarte_postgres_container
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -25,7 +25,7 @@ services:
       - cmykarte-network
   
   pgadmin:
-    container_name: pgadmin_container
+    container_name: cmykarte_pgadmin_container
     image: dpage/pgadmin4:7.2
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
@@ -49,7 +49,7 @@ services:
     build:
       context: .
       dockerfile: ./src/Dockerfile
-    container_name: game
+    container_name: cmykarte_game
     environment:
       PORT: 8080
       POSTGRES_URL: ${POSTGRES_URL}
@@ -64,7 +64,7 @@ services:
 
   metabase:
     image: metabase/metabase:v0.55.6
-    container_name: metabase
+    container_name: cmykarte_metabase
     environment:
       MB_DB_FILE: /metabase-data/metabase.db
       MB_SITE_URL: http://localhost:3000
@@ -78,7 +78,7 @@ services:
 
   metabase-provisioner:
     image: python:3.13-alpine
-    container_name: metabase-provisioner
+    container_name: cmykarte_metabase-provisioner
     command: ["python", "/provision.py"]
     environment:
       METABASE_URL: http://metabase:3000
