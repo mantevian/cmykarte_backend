@@ -2,7 +2,7 @@ name: Test and deploy
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
 
 permissions:
@@ -22,7 +22,7 @@ jobs:
         run: go test ./...
 
   deploy:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/master'
     needs: test
     runs-on: ubuntu-latest
     steps:
@@ -55,8 +55,8 @@ jobs:
             "$DEPLOY_USER@$DEPLOY_HOST" "sh -s -- '$DEPLOY_PATH'" <<'REMOTE'
           set -eu
           cd "$1"
-          test "$(git branch --show-current)" = main
-          git pull --ff-only origin main
+          test "$(git branch --show-current)" = master
+          git pull --ff-only origin master
           export BUILD_VERSION="$(git rev-parse --short HEAD)"
           docker compose up -d --build
           REMOTE
