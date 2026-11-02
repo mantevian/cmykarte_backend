@@ -3,9 +3,7 @@
 ## Run the backend and analytics
 
 Set the existing database and pgAdmin values, plus `METABASE_DB_PASSWORD`,
-`METABASE_ADMIN_EMAIL`, `METABASE_ADMIN_PASSWORD`, and `MB_SITE_URL` in `.env`. Set
-`MB_SITE_URL` to the URL users will use to access Metabase (for example,
-`https://mysite.net/metabase` when reverse-proxied by Caddy). The
+`METABASE_ADMIN_EMAIL`, and `METABASE_ADMIN_PASSWORD` in `.env`. The
 `.env.example` file lists the required variables; replace every example
 password before starting the services. Use a valid email address and a unique,
 uncommon Metabase admin password of at least 12 characters.
