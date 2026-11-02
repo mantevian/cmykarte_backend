@@ -33,7 +33,7 @@ jobs:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
         run: |
           set -eu
           test -n "$DEPLOY_HOST"
