@@ -3,7 +3,9 @@
 ## Run the backend and analytics
 
 Set the existing database and pgAdmin values, plus `METABASE_DB_PASSWORD`,
-`METABASE_ADMIN_EMAIL`, and `METABASE_ADMIN_PASSWORD` in `.env`. The
+`METABASE_ADMIN_EMAIL`, `METABASE_ADMIN_PASSWORD`, and `MB_SITE_URL` in `.env`. Set
+`MB_SITE_URL` to the URL users will use to access Metabase (for example,
+`https://mysite.net/metabase` when reverse-proxied by Caddy). The
 `.env.example` file lists the required variables; replace every example
 password before starting the services. Use a valid email address and a unique,
 uncommon Metabase admin password of at least 12 characters.
@@ -11,8 +13,9 @@ uncommon Metabase admin password of at least 12 characters.
 Start the services with `docker compose -f compose.yaml -f compose.dev.yaml up --build`
 for development with Go hot reload. To run the production-style container
 locally, use `docker compose up --build`. Metabase is available at
-http://localhost:3000 and the game server at http://localhost:8080. Metabase
-binds to localhost and requires the configured admin login. On first startup,
+http://localhost:7004 and the game server at http://localhost:7003. PostgreSQL
+is published on port 7001 and pgAdmin on port 7002. Metabase binds to localhost
+and requires the configured admin login. On first startup,
 the provisioner creates a read-only PostgreSQL connection and the Match Health,
 Card Balance, and Gameplay Progression dashboards.
 
@@ -85,7 +88,8 @@ secrets or sensitive user input in application error messages.
 For an existing PostgreSQL volume, apply
 `postgres/migrations/001_crash_reports.sql` before deploying the updated game
 server, then rerun the `metabase-provisioner` service to create the dashboard.
-The Unity server defaults to `http://localhost:8080` for local development.
+The Unity client should connect to `http://localhost:7003` for local
+development.
 Pass `-server-url=https://your-game-server.example.com` in the player launch
 arguments to use a deployed backend; the WebSocket connection automatically
 uses `wss` for HTTPS. Put a TLS-terminating reverse proxy in front of the Go
